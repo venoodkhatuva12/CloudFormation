@@ -1,0 +1,62 @@
+{
+"Parameters" : {
+   "MinSize" :{
+      "Type": "String"
+   },
+   "MaxSize" : {
+      "Type" : "String"
+   },
+   "DesiredCapacity" :{
+      "Type" : "String"
+   },
+   "WebServerPort" : {
+      "Type" : "String"
+   }
+},
+"Resources" : {
+   "testLc" : {
+      "Type" : "AWS::AutoScaling::LaunchConfiguration",
+      "Properties" : {
+         "AssociatePublicIpAddress" : true,            
+         "EbsOptimized" : false,            
+         "ImageId" : "ami-14c5486b",         
+         "InstanceMonitoring" : false,
+         "InstanceType" : "t2.medium",
+         "KeyName" : "sitewalla",
+         "PlacementTenancy" : "default",            
+         "SecurityGroups" : [ "sg-abc123" ],
+         "UserData" : {
+            "Fn::Base64": { "Fn::Join": [ "\n", [
+               "#!/bin/bash -xe",
+               "export INSTANCEID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)",
+               "yum install python-setuptools -y",
+               "yum install python-pip -y",
+               "pip install requests ; pip install awscli",
+               "mkdir /root/.aws",
+               "aws configure set aws_access_key_id KEYID",
+               "aws configure set aws_secret_access_key ACCESSKEY",
+               "aws ec2 attach-network-interface --region us-east-1 --instance-id $INSTANCEID --device-index 2 --network-interface-id eni-abc123"
+            ]]}
+         }
+      }
+   },      
+"testAsg" : {
+   "Type" : "AWS::AutoScaling::AutoScalingGroup",
+   "Properties" : {
+      "Cooldown" : "480",
+      "DesiredCapacity" : {"Ref":"DesiredCapacity"},
+      "HealthCheckGracePeriod" : 300,
+      "HealthCheckType" : "EC2",
+      "LaunchConfigurationName" : { "Ref": "testLc" },            
+      "MaxSize" : {"Ref":"MaxSize"},
+      "MinSize" : {"Ref": "MinSize"},            
+      "Tags" : [ {
+         "Key" : "Name",
+         "Value" : "test-node",
+         "PropagateAtLaunch" : "true"
+         }],
+      "VPCZoneIdentifier" : [ "subnet-abc123"]
+      }
+   }
+ }
+}
