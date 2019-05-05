@@ -1,0 +1,633 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "nopCommerce single level app tier",
+  
+    "Parameters" : {
+        "SubnetsPrivate" : {
+          "Type" : "List<AWS::EC2::Subnet::Id>",
+          "Description" : "The list of SubnetIds in your Virtual Private Cloud (VPC)",
+          "ConstraintDescription" : "must be a list of at least two existing subnets associated with at least two different availability zones. They should be residing in the selected Virtual Private Cloud."
+        },
+    
+        "SubnetsPublic" : {
+          "Type" : "List<AWS::EC2::Subnet::Id>",
+          "Description" : "The list of SubnetIds in your Virtual Private Cloud (VPC)",
+          "ConstraintDescription" : "must be a list of at least two existing subnets associated with at least two different availability zones. They should be residing in the selected Virtual Private Cloud."
+        },
+    
+        "InstanceType" : {
+          "Description" : "WebServer EC2 instance type",
+          "Type" : "String",
+          "Default" : "t2.small",
+          "AllowedValues" : [ "t1.micro", "t2.nano", "t2.micro", "t2.small", "t2.medium", "t2.large", "m1.small", "m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "m3.medium", "m3.large", "m3.xlarge", "m3.2xlarge", "m4.large", "m4.xlarge", "m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "c1.medium", "c1.xlarge", "c3.large", "c3.xlarge", "c3.2xlarge", "c3.4xlarge", "c3.8xlarge", "c4.large", "c4.xlarge", "c4.2xlarge", "c4.4xlarge", "c4.8xlarge", "g2.2xlarge", "g2.8xlarge", "r3.large", "r3.xlarge", "r3.2xlarge", "r3.4xlarge", "r3.8xlarge", "i2.xlarge", "i2.2xlarge", "i2.4xlarge", "i2.8xlarge", "d2.xlarge", "d2.2xlarge", "d2.4xlarge", "d2.8xlarge", "hi1.4xlarge", "hs1.8xlarge", "cr1.8xlarge", "cc2.8xlarge", "cg1.4xlarge", "p2.xlarge", "p2.8xlarge", "p2.16xlarge", "r5d.large", "r5d.xlarge", "r5d.2xlarge", "r5d.4xlarge", "r5d.12xlarge", "r5d.24xlarge", "r5d.metal", "r5.large", "r5.xlarge", "r5.2xlarge", "r5.4xlarge", "r5.12xlarge", "r5.24xlarge", "r5.metal", "r4.large", "r4.xlarge", "r4.2xlarge", "r4.4xlarge", "r4.8xlarge", "r4.16xlarge", "x1.16xlarge", "x1.32xlarge", "d2.xlarge", "d2.2xlarge", "d2.4xlarge", "d2.8xlarge", "i2.xlarge", "i2.2xlarge", "i2.4xlarge", "i2.8xlarge", "i3.large", "i3.xlarge", "i3.2xlarge", "i3.4xlarge", "i3.8xlarge", "i3.16xlarge"],
+          "ConstraintDescription" : "must be a valid EC2 instance type."
+        },
+    
+        "OperatorEMail": {
+          "Description": "EMail address to notify if there are any scaling operations",
+          "Type": "String",
+          "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
+          "ConstraintDescription": "must be a valid email address."
+        },
+    
+        "KeyName" : {
+          "Description" : "The EC2 Key Pair to allow SSH access to the instances",
+          "Type" : "AWS::EC2::KeyPair::KeyName",
+          "ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+        },
+    
+        "SSHLocation" : {
+          "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+          "Type": "String",
+          "MinLength": "9",
+          "MaxLength": "18",
+          "Default": "0.0.0.0/0",
+          "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+          "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+        },
+        "HTTPLocation" : {
+          "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+          "Type": "String",
+          "MinLength": "9",
+          "MaxLength": "18",
+          "Default": "0.0.0.0/0",
+          "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+          "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+      },
+      "AMI2RegionMap": {
+            "Description": "AMI id for portal",
+            "Type": "String",
+            "ConstraintDescription": "must be a valid AMI ID."
+      },
+      "MaxSize": {
+              "Description": "The maximum size of the Auto Scaling group.",
+              "Type": "Number",
+              "Default": 5,
+              "ConstraintDescription": "Must be >= 1",
+              "MinValue": 1
+      },
+      "MinSize": {
+              "Description": "The minimum size of the Auto Scaling group.",
+              "Type": "Number",
+              "Default": 2,
+              "ConstraintDescription": "Must be >= 1",
+              "MinValue": 1
+      },
+      "WebServerCapacity": {
+          "Default": "2",
+          "Description": "The initial nuber of WebServer instances",
+          "Type": "Number",
+          "MinValue": "1",
+          "MaxValue": "5",
+          "ConstraintDescription": "must be between 1 and 5 EC2 instances."
+        },
+      "CPUHighThreshold": {
+          "Description": "Scale up if free cluster capacity >= 40 Instance (based on MaxCPU and MinCPU settings)",
+          "Type": "Number",
+          "Default": 70,
+          "MinValue": 40,
+          "ConstraintDescription": "Must be >= 40"
+      },
+      "CPULowThreshold": {
+          "Description": "Scale down if free cluster capacity <= 20 Instance (based on MaxCPU and MinCPU settings)",
+          "Type": "Number",
+          "Default": 40,
+          "MinValue": 20,
+          "ConstraintDescription": "Must be >= 20"
+      },
+      "MemoryHighThreshold": {
+        "Description": "Scale up if free cluster capacity >= 40 Instance (based on MaxMemory and MinMemory settings)",
+        "Type": "Number",
+        "Default": 70,
+        "MinValue": 40,
+        "ConstraintDescription": "Must be >= 40"
+    },
+    "MemoryLowThreshold": {
+        "Description": "Scale down if free cluster capacity <= 20 Instance (based on MaxMemory and MinMemory settings)",
+        "Type": "Number",
+        "Default": 40,
+        "MinValue": 20,
+        "ConstraintDescription": "Must be >= 20"
+      }
+    },
+  
+    "Resources" : {
+  
+      "NotificationTopic": {
+          "Type": "AWS::SNS::Topic",
+          "Properties": {
+            "Subscription": [ { "Endpoint": { "Ref": "OperatorEMail" }, "Protocol": "email" } ]
+          }
+        },
+  
+      "WebServerSecurityGroup" : {
+        "Type" : "AWS::EC2::SecurityGroup",
+        "Properties" : {
+          "GroupDescription" : "Enable http access from anywhere and SSH from office",
+          "SecurityGroupIngress": [
+            {"IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : { "Ref" : "HTTPLocation"}},
+            {"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : { "Ref" : "SSHLocation" } },
+            {
+              "IpProtocol" : "tcp",
+              "FromPort" : "80",
+              "ToPort" : "80",
+              "SourceSecurityGroupOwnerId" : {"Fn::GetAtt" : ["ElasticLoadBalancer", "SourceSecurityGroup.OwnerAlias"]},
+              "SourceSecurityGroupName" : {"Fn::GetAtt" : ["ElasticLoadBalancer", "SourceSecurityGroup.GroupName"]}
+            }
+          ],
+            "VpcId" : { "Ref" : "VpcId" }
+        }
+      },
+  
+      "WebServerGroup" : {
+        "Type" : "AWS::AutoScaling::AutoScalingGroup",
+        "Properties" : {
+          "AvailabilityZones" : { "Fn::GetAZs" : ""},
+          "VPCZoneIdentifier" : { "Ref" : "SubnetsPrivate" },
+          "Cooldown" : "60",
+          "HealthCheckGracePeriod" : "120",
+          "HealthCheckType" : "EC2",
+          "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+          "MinSize": {
+              "Ref": "MinSize"
+              },
+          "MaxSize": {
+              "Ref": "MaxSize"
+              },
+          "DesiredCapacity": {
+              "Ref": "WebServerCapacity"
+              },
+          "LoadBalancerNames" : [ { "Ref" : "ElasticLoadBalancer" } ],
+          "MetricsCollection" : [ {
+            "Granularity" : "1Minute"
+          } ],
+          "NotificationConfiguration" : {
+            "TopicARN" : { "Ref" : "NotificationTopic" },
+            "NotificationTypes" : [
+              "autoscaling:EC2_INSTANCE_LAUNCH",
+              "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+              "autoscaling:EC2_INSTANCE_TERMINATE",
+              "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+            ]
+          }
+        },
+        "CreationPolicy" : {
+          "ResourceSignal" : {
+            "Timeout" : "PT5M",
+            "Count": "2"
+          }
+        },
+        "UpdatePolicy" : {
+          "AutoScalingRollingUpdate" : {
+            "MaxBatchSize" : "1",
+            "MinInstancesInService" : "0",
+            "MinSuccessfulInstancesPercent" : "100",
+            "PauseTime" : "PT5M",
+            "WaitOnResourceSignals" : "true"
+          }
+        }
+      },
+  
+      "LaunchConfig" : {
+          "Type" : "AWS::AutoScaling::LaunchConfiguration",
+          "Metadata" : {
+            "Comment" : "Install a Moofwd FMU application",
+            "AWS::CloudFormation::Init" : {
+              "config" : {
+                "packages" : {
+                  "yum" : {
+                    "httpd" : []
+                  }
+                },
+                "files" : {
+                  "/etc/cfn/cfn-hup.conf" : {
+                    "content" : { "Fn::Join" : ["", [
+                      "[main]\n",
+                      "stack=", { "Ref" : "AWS::StackId" }, "\n",
+                      "region=", { "Ref" : "AWS::Region" }, "\n"
+                    ]]},
+                     "mode"    : "000400",
+                     "owner"   : "root",
+                     "group"   : "root"
+                  },
+    
+                  "/etc/cfn/hooks.d/cfn-auto-reloader.conf" : {
+                    "content": { "Fn::Join" : ["", [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.LaunchConfig.Metadata.AWS::CloudFormation::Init\n",
+                      "action=/opt/aws/bin/cfn-init -v ",
+                      " --stack ", { "Ref" : "AWS::StackName" },
+                      " --resource LaunchConfig ",
+                      " --region ", { "Ref" : "AWS::Region" }, "\n",
+                      "runas=root\n"
+                    ]]},
+                      "mode"    : "000400",
+                      "owner"   : "root",
+                      "group"   : "root"
+                  }
+                },
+  
+                "commands" : {
+                  "ELBHealthCheck" : {
+                    "command" : { "Fn::Join" : ["", [ 
+                      "until [ \"$state\" == \"\\\"InService\\\"\" ]; do ",
+                      "  state=$(aws --region ", { "Ref" : "AWS::Region" }, " elb describe-instance-health ",
+                      "              --load-balancer-name ", { "Ref" : "ElasticLoadBalancer" }, 
+                      "              --instances $(curl -s http://169.254.169.254/latest/meta-data/instance-id) ",
+                      "              --query InstanceStates[0].State); ",
+                      "  sleep 10; ",
+                      "done|| exit 1", "\n"
+                    ]]}
+                  }
+                }
+              },
+                "services" : {    
+                  "sysvinit" : {
+                    "cfn-hup" : { "enabled" : "true", "ensureRunning" : "true",
+                                  "files" : ["/etc/cfn/cfn-hup.conf", "/etc/cfn/hooks.d/cfn-auto-reloader.conf"]}
+                  }}}
+  
+          },
+    
+          "Properties" : {
+            "ImageId" : { "Ref" : "AMI2RegionMap" },
+            "KeyName" : { "Ref" : "KeyName" },
+            "SecurityGroups" : [ { "Ref" : "WebServerSecurityGroup" } ],
+            "InstanceType" : { "Ref" : "InstanceType" },
+            "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+                 "#!/bin/bash -xe\n",
+                 "yum update -y aws-cfn-bootstrap\n",
+                 "/opt/aws/bin/cfn-init -v ",
+                 " --stack ", { "Ref" : "AWS::StackName" },
+                 " --resource LaunchConfig ",
+                 " --region ", { "Ref" : "AWS::Region" }, "\n",
+    
+                 "/opt/aws/bin/cfn-signal -e $? ",
+                 " --stack ", { "Ref" : "AWS::StackName" },
+                 " --resource WebServerGroup ",
+                 " --region ", { "Ref" : "AWS::Region" }, "\n"
+                  ]]}} }
+          },
+  
+      "ElasticLoadBalancer" : {
+        "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+        "Properties" : {
+          "Subnets" : { "Ref" : "SubnetsPublic"},
+          "CrossZone" : "true",
+          "Listeners" : [ {
+            "LoadBalancerPort" : "80",
+            "InstancePort" : "80",
+            "Protocol" : "HTTP"
+          } ],
+          "HealthCheck" : {
+            "Interval" : "15",
+            "HealthyThreshold" : "3",
+            "Target" : "HTTP:80/saml2/metadata",
+            "Timeout" : "3",
+            "UnhealthyThreshold" : "2"
+          }
+        }
+      },
+  
+      "WebServerScaleUpPolicy" : {
+        "Type" : "AWS::AutoScaling::ScalingPolicy",
+        "Properties" : {
+          "AdjustmentType" : "ChangeInCapacity",
+          "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+          "Cooldown" : "60",
+          "PolicyType" : "SimpleScaling",
+          "ScalingAdjustment" : "1"
+        }
+      },
+  
+      "WebServerScaleDownPolicy" : {
+        "Type" : "AWS::AutoScaling::ScalingPolicy",
+        "Properties" : {
+          "AdjustmentType" : "ChangeInCapacity",
+          "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+          "Cooldown" : "60",
+          "PolicyType" : "SimpleScaling",
+          "ScalingAdjustment" : "-1"
+        }
+      },
+  
+      "CPUAlarmHigh" : {
+       "Type" : "AWS::CloudWatch::Alarm",
+       "Properties" : {
+         "ActionsEnabled" : "true",
+         "AlarmActions" : [ {
+           "Ref" : "WebServerScaleUpPolicy"
+          },
+          {
+            "Ref": "NotificationTopic"
+          } ],
+         "AlarmDescription" : "Scale-up if CPU > 75% for 10 minutes",
+         "AlarmName" : "CPUAlarmHigh",
+         "ComparisonOperator" : "GreaterThanThreshold",
+         "Dimensions" : [ {
+              "Name" : "AutoScalingGroupName",
+              "Value" : { "Ref": "WebServerGroup" }
+            } ],
+         "EvaluationPeriods" : "2",
+         "MetricName" : "CPUUtilization",
+         "Namespace" : "AWS/EC2",
+         "Statistic" : "Average",
+         "Period" : "300",
+         "Threshold": {
+          "Ref": "CPUHighThreshold"
+        }
+        }
+      },
+  
+      "CPUAlarmLow": {
+       "Type": "AWS::CloudWatch::Alarm",
+       "Properties": {
+         "ActionsEnabled" : "true",
+         "AlarmActions" : [ {
+           "Ref" : "WebServerScaleDownPolicy"
+         }, {"Ref":  "NotificationTopic"} ],
+         "AlarmDescription" : "Scale-down if CPU < 50% for 10 minutes",
+         "AlarmName" : "CPUAlarmLow",
+         "ComparisonOperator" : "LessThanThreshold",
+         "Dimensions" : [ {
+           "Name" : "AutoScalingGroupName",
+           "Value" : { "Ref": "WebServerGroup" }
+         } ],
+         "EvaluationPeriods" : "2",
+         "MetricName" : "CPUUtilization",
+         "Namespace" : "AWS/EC2",
+         "Statistic" : "Average",
+         "Period" : "300",
+         "Threshold": {
+          "Ref": "CPULowThreshold"
+          }
+        }
+      },
+  
+      "MemoryAlarmHigh": {
+          "Type": "AWS::CloudWatch::Alarm",
+          "Properties": {
+            "ActionsEnabled" : "true",
+             "AlarmDescription": "Scale-up if Memory > 50% for 5 minutes",
+             "MetricName": "MemoryUtilization",
+             "Namespace": "System/Linux",
+             "Statistic": "Average",
+             "Period": "60",
+             "EvaluationPeriods": "1",
+             "Threshold": {
+               "Ref": "MemoryHighThreshold"
+             },
+             "AlarmActions": [ { "Ref": "WebServerScaleUpPolicy" }, {"Ref":  "NotificationTopic"} ],
+             "Dimensions": [
+               {
+                 "Name": "AutoScalingGroupName",
+                 "Value": { "Ref": "WebServerGroup" }
+               }
+             ],
+             "ComparisonOperator": "GreaterThanThreshold"
+           }
+         },
+      
+         "MemoryAlarmLow": {
+          "Type": "AWS::CloudWatch::Alarm",
+          "Properties": {
+            "ActionsEnabled" : "true",
+             "AlarmDescription": "Scale-down if Memory < 20% for 5 minutes",
+             "MetricName": "MemoryUtilization",
+             "Namespace": "System/Linux",
+             "Statistic": "Average",
+             "Period": "60",
+             "EvaluationPeriods": "1",
+             "Threshold": {
+               "Ref": "MemoryLowThreshold"
+           },
+             "AlarmActions": [ { "Ref": "WebServerScaleDownPolicy" }, {"Ref":  "NotificationTopic"}  ],
+             "Dimensions": [
+               {
+                 "Name": "AutoScalingGroupName",
+                 "Value": { "Ref": "WebServerGroup" }
+               }
+             ],
+             "ComparisonOperator": "LessThanThreshold"
+           }
+         },
+  
+      "ELBLatency" : {
+        "Type" : "AWS::CloudWatch::Alarm",
+        "Properties": {
+          "ActionsEnabled": "true",
+          "AlarmActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "AlarmDescription": "ELB Latency",
+          "ComparisonOperator": "GreaterThanThreshold",
+          "Dimensions": [
+            {
+              "Name": "LoadBalancerName",
+              "Value": { "Ref" : "ElasticLoadBalancer" }
+            }
+          ],
+          "EvaluationPeriods": "1",
+          "InsufficientDataActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "MetricName": "Latency",
+          "Namespace": "AWS/ELB",
+          "Statistic": "Average",
+          "Period": "300",
+          "Threshold": "1"
+        }
+      },
+  
+      "ELBSpilloverCount" : {
+        "Type" : "AWS::CloudWatch::Alarm",
+        "Properties": {
+          "ActionsEnabled": "true",
+          "AlarmActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "AlarmDescription": "ELB SpilloverCount",
+          "ComparisonOperator": "GreaterThanThreshold",
+          "Dimensions": [
+            {
+              "Name": "LoadBalancerName",
+              "Value": { "Ref" : "ElasticLoadBalancer" }
+            }
+          ],
+          "EvaluationPeriods": "1",
+          "InsufficientDataActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "MetricName": "SpilloverCount",
+          "Namespace": "AWS/ELB",
+          "Statistic": "Maximum",
+          "Period": "300",
+          "Threshold": "10"
+        }
+      },
+  
+      "ELBSurgeQueueLength" : {
+        "Type" : "AWS::CloudWatch::Alarm",
+        "Properties": {
+          "ActionsEnabled": "true",
+          "AlarmActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "AlarmDescription": "ELB SurgeQueueLength",
+          "ComparisonOperator": "GreaterThanThreshold",
+          "Dimensions": [
+            {
+              "Name": "LoadBalancerName",
+              "Value": { "Ref" : "ElasticLoadBalancer" }
+            }
+          ],
+          "EvaluationPeriods": "1",
+          "InsufficientDataActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "MetricName": "SurgeQueueLength",
+          "Namespace": "AWS/ELB",
+          "Statistic": "Maximum",
+          "Period": "300",
+          "Threshold": "512"
+        }
+      },
+  
+      "ELBRequestCount" : {
+        "Type" : "AWS::CloudWatch::Alarm",
+        "Properties": {
+          "ActionsEnabled": "true",
+          "AlarmActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "AlarmDescription": "ELB RequestCount",
+          "ComparisonOperator": "GreaterThanThreshold",
+          "Dimensions": [
+            {
+              "Name": "LoadBalancerName",
+              "Value": { "Ref" : "ElasticLoadBalancer" }
+            }
+          ],
+          "EvaluationPeriods": "1",
+          "InsufficientDataActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "MetricName": "RequestCount",
+          "Namespace": "AWS/ELB",
+          "Statistic": "Sum",
+          "Period": "300",
+          "Threshold": "10000"
+        }
+      },
+  
+      "ELBHealthyHostCount" : {
+        "Type" : "AWS::CloudWatch::Alarm",
+        "Properties": {
+          "ActionsEnabled": "true",
+          "AlarmActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "AlarmDescription": "ELB Healthy Host Count",
+          "ComparisonOperator": "LessThanThreshold",
+          "Dimensions": [
+            {
+              "Name": "LoadBalancerName",
+              "Value": { "Ref" : "ElasticLoadBalancer" }
+            }
+          ],
+          "EvaluationPeriods": "1",
+          "InsufficientDataActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "MetricName": "HealthyHostCount",
+          "Namespace": "AWS/ELB",
+          "Statistic": "Average",
+          "Period": "300",
+          "Threshold": "1"
+        }
+      },
+  
+      "ELBHTTPCode4XX" : {
+        "Type" : "AWS::CloudWatch::Alarm",
+        "Properties": {
+          "ActionsEnabled": "true",
+          "AlarmActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "AlarmDescription": "ELB HTTPCode_ELB_4XX",
+          "ComparisonOperator": "LessThanThreshold",
+          "Dimensions": [
+            {
+              "Name": "LoadBalancerName",
+              "Value": { "Ref" : "ElasticLoadBalancer" }
+            }
+          ],
+          "EvaluationPeriods": "1",
+          "InsufficientDataActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "MetricName": "HTTPCode_ELB_4XX",
+          "Namespace": "AWS/ELB",
+          "Statistic": "Sum",
+          "Period": "300",
+          "Threshold": "100"
+        }
+      },
+  
+      "ELBHTTPCode5XX" : {
+        "Type" : "AWS::CloudWatch::Alarm",
+        "Properties": {
+          "ActionsEnabled": "true",
+          "AlarmActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "AlarmDescription": "ELB HTTPCode_ELB_5XX",
+          "ComparisonOperator": "LessThanThreshold",
+          "Dimensions": [
+            {
+              "Name": "LoadBalancerName",
+              "Value": { "Ref" : "ElasticLoadBalancer" }
+            }
+          ],
+          "EvaluationPeriods": "1",
+          "InsufficientDataActions": [
+            {
+              "Ref": "NotificationTopic"
+            }
+          ],
+          "MetricName": "HTTPCode_ELB_5XX",
+          "Namespace": "AWS/ELB",
+          "Statistic": "Sum",
+          "Period": "300",
+          "Threshold": "100"
+        }
+      }
+    }
+  }
